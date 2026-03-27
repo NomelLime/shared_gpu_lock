@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: shared-gpu-lock
-Version: 0.1.0
-Summary: GPUResourceManager + cross-process file lock (portalocker) for local ShortsProject/Orchestrator
-Requires-Python: >=3.10
-Requires-Dist: portalocker>=2.8
-Provides-Extra: dev
-Requires-Dist: pytest; extra == "dev"
