@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shared-gpu-lock"
+version = "0.1.0"
+description = "GPUResourceManager + cross-process file lock (portalocker) for local ShortsProject/Orchestrator"
+requires-python = ">=3.10"
+dependencies = [
+    "portalocker>=2.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shared_gpu_lock*"]

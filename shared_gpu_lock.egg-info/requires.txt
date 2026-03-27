@@ -1,0 +1,4 @@
+portalocker>=2.8
+
+[dev]
+pytest
