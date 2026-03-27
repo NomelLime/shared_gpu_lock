@@ -17,3 +17,7 @@ dev = ["pytest"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["shared_gpu_lock*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

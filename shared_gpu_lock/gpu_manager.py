@@ -43,6 +43,7 @@ class _GPUTask:
     consumer: str = field(compare=False)
     event: threading.Event = field(compare=False, default_factory=threading.Event)
     retries: int = field(compare=False, default=0)
+    aborted: bool = field(compare=False, default=False)
 
 
 class GPUResourceManager:
@@ -57,8 +58,10 @@ class GPUResourceManager:
         *,
         use_cross_process_lock: bool = True,
         cross_process_lock_timeout: float = 360.0,
+        dispatcher_semaphore_acquire_timeout: float = 300.0,
     ) -> None:
         self._max = max_concurrent
+        self._dispatcher_acquire_timeout = dispatcher_semaphore_acquire_timeout
         self._semaphore = threading.Semaphore(max_concurrent)
         self._lock = threading.Lock()
         self._task_queue: queue.PriorityQueue = queue.PriorityQueue(maxsize=100)
@@ -93,6 +96,11 @@ class GPUResourceManager:
         task.event.wait(timeout=360)
         if not task.event.is_set():
             raise TimeoutError(f"[GPUManager] GPU не получен за 360с для '{consumer}'")
+        if task.aborted:
+            raise RuntimeError(
+                f"[GPUManager] Задача [{consumer}] отменена: слот GPU недоступен после "
+                f"{_GPU_TASK_MAX_RETRIES} попыток диспетчера"
+            )
 
         start_time = time.monotonic()
         with self._lock:
@@ -106,6 +114,8 @@ class GPUResourceManager:
             else nullcontext()
         )
 
+        # Ровно один release на слот, выданный диспетчером (в т.ч. при TimeoutError file-lock).
+        owns_dispatcher_slot = True
         try:
             with lock_cm:
                 try:
@@ -115,19 +125,19 @@ class GPUResourceManager:
                     with self._lock:
                         self._active.pop(consumer, None)
                         self._update_stats(consumer, elapsed)
-                    self._semaphore.release()
                     logger.info(
                         "[GPUManager] [%s] GPU освобождён (занято %.1f сек.)",
                         consumer,
                         elapsed,
                     )
         except TimeoutError:
-            elapsed = time.monotonic() - start_time
             with self._lock:
                 self._active.pop(consumer, None)
-            self._semaphore.release()
             logger.error("[GPUManager] [%s] Таймаут кросс-процессного GPU-lock", consumer)
             raise
+        finally:
+            if owns_dispatcher_slot:
+                self._semaphore.release()
 
     def gpu_task(self, priority: int = GPUPriority.ENCODE):
         def decorator(fn: Callable):
@@ -165,7 +175,7 @@ class GPUResourceManager:
             except queue.Empty:
                 continue
 
-            acquired = self._semaphore.acquire(timeout=300)
+            acquired = self._semaphore.acquire(timeout=self._dispatcher_acquire_timeout)
             if not acquired:
                 task.retries += 1
                 if task.retries >= _GPU_TASK_MAX_RETRIES:
@@ -174,6 +184,8 @@ class GPUResourceManager:
                         task.consumer,
                         task.retries,
                     )
+                    task.aborted = True
+                    task.event.set()
                     continue
                 logger.warning(
                     "[GPUManager] Timeout ожидания слота для [%s] (попытка %d/%d)",
@@ -196,11 +208,23 @@ class GPUResourceManager:
 
 
 _gpu_manager: Optional[GPUResourceManager] = None
+_gpu_manager_lock = threading.Lock()
 
 
 def get_gpu_manager() -> GPUResourceManager:
     global _gpu_manager
     if _gpu_manager is None:
-        _gpu_manager = GPUResourceManager(max_concurrent=1)
-        _gpu_manager.start()
+        with _gpu_manager_lock:
+            if _gpu_manager is None:
+                _gpu_manager = GPUResourceManager(max_concurrent=1)
+                _gpu_manager.start()
     return _gpu_manager
+
+
+def reset_gpu_manager_singleton() -> None:
+    """Останавливает и сбрасывает глобальный синглтон (только тесты / отладка)."""
+    global _gpu_manager
+    with _gpu_manager_lock:
+        if _gpu_manager is not None:
+            _gpu_manager.stop()
+            _gpu_manager = None

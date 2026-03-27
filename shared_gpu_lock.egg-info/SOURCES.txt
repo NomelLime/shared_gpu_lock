@@ -7,3 +7,5 @@ shared_gpu_lock.egg-info/SOURCES.txt
 shared_gpu_lock.egg-info/dependency_links.txt
 shared_gpu_lock.egg-info/requires.txt
 shared_gpu_lock.egg-info/top_level.txt
+tests/test_file_lock.py
+tests/test_gpu_manager.py
