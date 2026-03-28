@@ -59,8 +59,10 @@ class GPUResourceManager:
         use_cross_process_lock: bool = True,
         cross_process_lock_timeout: float = 360.0,
         dispatcher_semaphore_acquire_timeout: float = 300.0,
+        warm_callback: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._max = max_concurrent
+        self._warm_callback = warm_callback
         self._dispatcher_acquire_timeout = dispatcher_semaphore_acquire_timeout
         self._semaphore = threading.Semaphore(max_concurrent)
         self._lock = threading.Lock()
@@ -113,6 +115,12 @@ class GPUResourceManager:
             if self._use_cross_process_lock
             else nullcontext()
         )
+
+        if self._warm_callback:
+            try:
+                self._warm_callback(consumer)
+            except Exception as e:
+                logger.warning("[GPUManager] warm callback error: %s", e)
 
         # Ровно один release на слот, выданный диспетчером (в т.ч. при TimeoutError file-lock).
         owns_dispatcher_slot = True
