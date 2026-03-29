@@ -1,0 +1,12 @@
+diff --git a/.gitignore b/.gitignore
+index d09bd4c..aad3873 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -10,3 +10,7 @@ build/
+ .pytest_cache/
+ .coverage
+ htmlcov/
++-e 
++# Secrets
++.env
++.secrets.env

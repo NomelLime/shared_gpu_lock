@@ -10,3 +10,7 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+-e 
+# Secrets
+.env
+.secrets.env
